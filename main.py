@@ -8,6 +8,20 @@ from stops import Line, STOPS
 
 load_dotenv()
 
+_LINE_COLOR = {
+    Line.BLUE:   "\033[94m",        # bright blue
+    Line.RED:    "\033[91m",        # bright red
+    Line.YELLOW: "\033[93m",        # bright yellow
+    Line.GREEN:  "\033[92m",        # bright green
+    Line.ORANGE: "\033[38;5;208m",  # 256-color orange (no standard ANSI slot)
+}
+_RESET = "\033[0m"
+
+
+def _color_line(line: Line) -> str:
+    return f"{_LINE_COLOR[line]}{line.value}{_RESET}"
+
+
 _ROUTE_ID = {
     Line.BLUE:   100,
     Line.RED:    90,
@@ -59,4 +73,54 @@ def arrival(stop_id: int, line: Line | None = None) -> datetime | None:
     return datetime.fromtimestamp(earliest_ms / 1000) if earliest_ms is not None else None
 
 
-print(arrival(11502))
+def _menu(prompt: str, options: list[str]) -> int:
+    print()
+    for i, opt in enumerate(options, 1):
+        print(f"  {i}. {opt}")
+    print()
+    while True:
+        raw = input(f"{prompt} (1-{len(options)}, q to quit): ").strip()
+        if raw.lower() == "q":
+            raise SystemExit(0)
+        try:
+            choice = int(raw)
+            if 1 <= choice <= len(options):
+                return choice - 1
+        except ValueError:
+            pass
+        print(f"  Enter a number between 1 and {len(options)}.")
+
+
+def _select_stop() -> tuple[int, Line]:
+    lines = list(STOPS.keys())
+    line = lines[_menu("Select a line", [_color_line(l) for l in lines])]
+
+    stations = list(STOPS[line].keys())
+    station = stations[_menu(f"Select a {_color_line(line)} Line station", stations)]
+
+    dirs = STOPS[line][station]
+    if len(dirs) == 1:
+        direction = next(iter(dirs))
+        print(f"\n  Direction: {direction.value} (only option at this terminus)")
+    else:
+        direction_list = list(dirs.keys())
+        direction = direction_list[_menu("Select a direction", [d.value for d in direction_list])]
+
+    return dirs[direction], line
+
+
+def main() -> None:
+    print("TriMet MAX Train Arrival Tracker")
+    print("================================")
+    stop_id, line = _select_stop()
+    print(f"\nFetching next {_color_line(line)} Line arrival for stop {stop_id}...")
+    result = arrival(stop_id, line)
+    if result is None:
+        print("No upcoming arrivals found.")
+    else:
+        minutes = int((result - datetime.now()).total_seconds() / 60)
+        print(f"Next arrival: {result.strftime('%I:%M %p')} ({minutes} min)")
+
+
+if __name__ == "__main__":
+    main()
